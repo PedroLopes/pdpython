@@ -28,8 +28,18 @@
 #include "m_pd.h"
 
 /****************************************************************/ 
-/// Data structure to hold the state of a single Pd 'python' object.
-/// Each object represents one instance of a Python class.
+// Select the level of debug (messages posted from python to
+// the pd parent window by assigning the each DEBUG variable:
+///	CRITICAL: errors in pdpython (e.g., not enough arguments)
+///	WARNING: warnings in pdpython (e.g., non existing method)
+///	VERBOSE: everything else (e.g., free object, create object)
+const int DEBUG_ERROR = 1;
+const int DEBUG_WARNING = 1;
+const int DEBUG_VERBOSE = 1;
+
+/****************************************************************/ 
+// Data structure to hold the state of a single Pd 'python' object.
+// Each object represents one instance of a Python class.
 typedef struct pdpython
 {
   t_object x_ob;           ///< standard object header
@@ -41,7 +51,6 @@ static t_class *pdpython_class;
 
 /****************************************************************/
 // Utility functions for object conversion.
-
 /// Attempt to convert a Pd object to a Python object.  The caller must take
 /// responsibility for releasing the Python object reference returned.
 static PyObject *t_atom_to_PyObject( t_atom *atom ) 
@@ -69,7 +78,7 @@ static PyObject *t_atom_to_PyObject( t_atom *atom )
     // A_GIMME
     // A_CANT
     // A_BLOB
-    post( "Warning: type %d unsupported for conversion to Python.", atom->a_type );
+    if (DEBUG_WARNING) post( "Warning: type %d unsupported for conversion to Python.", atom->a_type );
     Py_RETURN_NONE;
   }
 }
@@ -164,7 +173,7 @@ static void emit_outlet_message( PyObject *value, t_outlet *x_outlet )
 ///   list with selector  : obj.$selector(string)    example: [ goto 4 ] calls obj.goto( 4.0 )
 ///
 /// more examples:
-///  [ blah ]      is a lsit with a selector and null values, calls obj.blah()
+///  [ blah ]      is a list with a selector and null values, calls obj.blah()
 ///  [ goto home ] is a list with a selector and a symbol, calls obj.blah( "home" )
 ///
 /// a weird special case:
@@ -172,14 +181,14 @@ static void emit_outlet_message( PyObject *value, t_outlet *x_outlet )
 
 static void pdpython_eval( t_pdpython *x, t_symbol *selector, int argcount, t_atom *argvec )
 {
-  // post ("pdpython_eval called with %d args, selector %s\n", argcount, selector->s_name );
+  if (DEBUG_VERBOSE) post ("Verbose: pdpython_eval called with %d args, selector %s\n", argcount, selector->s_name );
 
   PyObject *func = NULL;
   PyObject *args = NULL;
   PyObject *value = NULL;    
 
   if (x->py_object == NULL) {
-    post("Warning: message sent to uninitialized python object.");
+    if (DEBUG_WARNING) post("Warning: message sent to uninitialized python object.");
     return;
   }
 
@@ -196,10 +205,10 @@ static void pdpython_eval( t_pdpython *x, t_symbol *selector, int argcount, t_at
   args = t_atom_list_to_PyObject_list( argcount, argvec );
   
   if (!func) {
-    post("Warning: no Python function found for selector %s.", selector->s_name );
+    if (DEBUG_WARNING) post("Warning: no Python function found for selector %s.", selector->s_name );
   } else {
     if (!PyCallable_Check( func )) {
-      post("Warning: Python attribute for selector %s is not callable.", selector->s_name );
+      if (DEBUG_WARNING) post("Warning: Python attribute for selector %s is not callable.", selector->s_name );
     } else {
       value = PyObject_CallObject( func, args );
     }
@@ -209,7 +218,7 @@ static void pdpython_eval( t_pdpython *x, t_symbol *selector, int argcount, t_at
   if (args) Py_DECREF( args );
 
   if (value == NULL) {
-    post("Warning: Python call for selector %s failed.", selector->s_name );
+    if (DEBUG_WARNING) post("Warning: Python call for selector %s failed. Probably the python code is faulty in this method call (throwing excption).", selector->s_name );
 
   } else {
     if (PyTuple_Check(value)) {
@@ -241,10 +250,10 @@ static void *pdpython_new(t_symbol *selector, int argcount, t_atom *argvec)
   t_pdpython *x = (t_pdpython *) pd_new(pdpython_class);
   x->py_object = NULL;
 
-  // post("pdpython_new called with selector %s and argcount %d", selector->s_name, argcount );
+  if (DEBUG_VERBOSE) post("Verbose: pdpython_new called with selector %s and argcount %d", selector->s_name, argcount );
 
   if (argcount < 2) {
-    post("Error: python objects require a module and function specified in the creation arguments.");
+    if (DEBUG_ERROR) post("Error: python objects require a module and function specified in the creation arguments.");
 
   } else {
     // Add the current canvas path to the Python load path if not already
@@ -255,11 +264,10 @@ static void *pdpython_new(t_symbol *selector, int argcount, t_atom *argvec)
     PyObject* sysPath    = PySys_GetObject( (char*) "path" ); // borrowed reference
 
     if ( !PySequence_Contains( sysPath, modulePath )) {
-      post("Appending current canvas path to Python load path: %s", canvas_path->s_name );
+      if (DEBUG_VERBOSE)  post("Verbose: Appending current canvas path to Python load path: %s", canvas_path->s_name );
       PyList_Append(sysPath, modulePath );
     }
     Py_DECREF( modulePath );
-
 
     // try loading the module
     PyObject *module_name   = t_atom_to_PyObject( &argvec[0] );
@@ -267,17 +275,17 @@ static void *pdpython_new(t_symbol *selector, int argcount, t_atom *argvec)
     Py_DECREF( module_name );
 
     if ( module == NULL ) {
-      post("Error: unable to import Python module %s.", argvec[0].a_w.w_symbol->s_name );
+      if (DEBUG_ERROR) post("Error: unable to import Python module %s.", argvec[0].a_w.w_symbol->s_name );
 
     } else {
       PyObject *func = PyObject_GetAttrString( module, argvec[1].a_w.w_symbol->s_name );
 
       if ( func == NULL) {
-	post("Error: Python function %s not found.", argvec[1].a_w.w_symbol->s_name );
+	if (DEBUG_ERROR) post("Error: Python function %s not found.", argvec[1].a_w.w_symbol->s_name );
 
       } else {
 	if (!PyCallable_Check( func )) {
-	  post("Error: Python attribute %s is not callable.", argvec[1].a_w.w_symbol->s_name );
+	  if (DEBUG_ERROR) post("Error: Python attribute %s is not callable.", argvec[1].a_w.w_symbol->s_name );
 
 	} else {
 	  PyObject *args = t_atom_list_to_PyObject_list( argcount-2, argvec+2 );
@@ -298,7 +306,7 @@ static void *pdpython_new(t_symbol *selector, int argcount, t_atom *argvec)
 /// Release an instance of a Pd 'python' object.
 static void pdpython_free(t_pdpython *x)
 {
-  post("python freeing object");
+  if (DEBUG_VERBOSE) post("Verbose: python freeing object");
   if (x) {
     outlet_free( x->x_outlet );
     if (x->py_object) Py_DECREF( x->py_object );
@@ -318,7 +326,7 @@ static PyObject* pdgui_post( PyObject *self __attribute__((unused)), PyObject *a
 {
   char *text;
   if( !PyArg_ParseTuple(args, "s", &text )) {
-    post("Warning: unprintable object posted to the console from a python object.");
+    if (DEBUG_WARNING) post("Warning: unprintable object posted to the console from a python object.");
     return NULL;
   } else {
     post( text );
@@ -362,7 +370,7 @@ void python_setup(void)
 
   // make the internal pdgui wrapper module available for Python->C callbacks
   if (Py_InitModule("pdgui", pdgui_methods ) == NULL) {
-    post("Error: unable to create the pdgui module.");
+    if (DEBUG_ERROR) post("Error: unable to create the pdgui module.");
  }
 }
 /****************************************************************/
