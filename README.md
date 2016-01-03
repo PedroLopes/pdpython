@@ -57,7 +57,10 @@ Building under Linux:
 Installation
 ------------
 
-There are three files to be installed:
+Easy install: `sudo make -f Makefile.OSX` (for OSX Makefile)
+Note: this is copying the files to ~/Library/Pd/pdpython, make sure to add this to Pd Path.
+
+Essentially what this is doing is installing the following files:
 
   1. the loadable module:  python.pd_Darwin or python.pd_linux
   2. python-help.pd

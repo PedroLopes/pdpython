@@ -1,6 +1,7 @@
 # -*- mode: makefile; -*-
 # Makefile - build control for the pdpython external for OS X.
 # Copyright (c) 2014, Garth Zeglin.  All rights reserved.  Provided under the terms of the BSD 3-clause license.
+# Modified by Pedro Lopes, 2015. Distributed as is and inherits the same license and all credit to Garth Zeglin. 
 
 # ---- user-customizable settings ----------------------------------
 
@@ -11,9 +12,11 @@ PD_INCLUDE_PATH=/Applications/local/Pd-extended-0.43.4-i386.app/Contents/Resourc
 # Configure to compile and link against the default Python system.  Note that OS
 # X provides a Python interpreter, but alternative interpreters and virtualenv
 # environments could also be configured here.
-
 PYTHON_CFLAGS  := `python-config  --cflags`
 PYTHON_LDFLAGS := `python-config  --ldflags`
+
+#Specify a folder to hold the installed Pdpython files, this must be in Pd Path
+INSTALL_DIR = ~/Library/Pd/pdpython/
 
 # ---- The following settings do not usually need to be changed ----
 
@@ -29,6 +32,10 @@ default: $(EXTERNALS_DIR) $(EXTERNALS_DIR)/python.$(EXTERNALS_EXT) $(EXTERNALS_D
 # Create the target folder if it doesn't exist.
 $(EXTERNALS_DIR):
 	mkdir $(EXTERNALS_DIR)
+
+# Create the install folder if it doesn't exist.
+$(INSTALL_DIR):
+	mkdir $(INSTALL_DIR)
 
 # Define the compile and link flags for producing a loadable module.
 MODULE_CFLAGS = -bundle -undefined suppress -flat_namespace -I$(PD_INCLUDE_PATH)
@@ -48,3 +55,6 @@ $(EXTERNALS_DIR)/python_help.py: src/python_help.py
 # Target to clean up the build folder.
 clean: $(EXTERNALS_DIR)
 	-rm -r $(EXTERNALS_DIR)/*
+
+install: $(INSTALL_DIR) 
+	-cp $(EXTERNALS_DIR)/* $(INSTALL_DIR)
